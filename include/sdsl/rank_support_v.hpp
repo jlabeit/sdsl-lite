@@ -85,12 +85,11 @@ class rank_support_v : public rank_support
 	    // We assume carry only spreads one block!
 	    
 	    // One pass only calculating carry and storing it in the first part of basic blocks
-	    m_basic_block[0] = trait_type::init_carry();
-	    {
-	    parallel_for (size_type b = 1; b < (m_v->capacity()>>9); b++) {
+	    m_basic_block[0] = m_basic_block[1] = trait_type::init_carry();
+	    parallel_for (size_type b = 1; b <= (m_v->capacity()>>9); b++) {
 		    m_basic_block[2*b] = trait_type::init_carry();
 		    trait_type::args_in_the_word(data[(b<<3) - 1], m_basic_block[2*b]);
-	    }}
+	    }
 	    // Second pass to calculate all the block sums
 	    parallel_for (size_type b = 0; b <= (m_v->capacity()>>9); b++) {
 		uint64_t carry = m_basic_block[2*b];
@@ -111,15 +110,6 @@ class rank_support_v : public rank_support
 	    // exclusive prefix sum over the block_sums
 	    sequence::skip1<int_vector<64>, uint64_t, size_type> skp(m_basic_block);
 	    sequence::scan(skp, skp, (basic_block_size>>1), utils::addF<uint64_t>() ,   (uint64_t)0);
-	   /* {
-		uint64_t sum = 0;
-		for (size_type b = 0; b < (m_v->capacity()>>9); ++b) {
-			sum += m_basic_block[2*b];
-			m_basic_block[2*b] = sum - m_basic_block[2*b];
-		}
-		m_basic_block[2*(m_v->capacity()>>9)] = sum;
-	    }*/
-
         }
 
         rank_support_v(const rank_support_v&)  = default;
