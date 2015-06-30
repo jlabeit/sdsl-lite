@@ -24,6 +24,7 @@
 #include "int_vector.hpp"
 #include "util.hpp"
 #include "select_support.hpp"
+#include "sequence.hpp"
 
 //! Namespace for the succinct data structure library.
 namespace sdsl
@@ -86,6 +87,13 @@ class select_support_mcl : public select_support
         void copy(const select_support_mcl<t_b, t_pat_len>& ss);
         void initData();
         void init_fast(const bit_vector* v=nullptr);
+	// Helper Functions
+	size_type sum_args_serial(size_type s, size_type e);
+	void init_superblock_serial(int_vector<64>& blockstarts, int_vector<64>& blockends, size_type arg_cnt, 
+			std::pair<uint32_t, uint32_t>* sb_to_chunk, uint32_t chunk_id, 
+			size_type s, size_type e, const size_type SUPER_BLOCK_SIZE);
+	void init_longblock_serial(int_vector<64>& longblock, size_type s, size_type e, size_type offset);
+	void init_miniblock_serial(int_vector<0>& miniblock, size_type s, size_type e);
     public:
         explicit select_support_mcl(const bit_vector* v=nullptr);
         select_support_mcl(const select_support_mcl<t_b,t_pat_len>& ss);
@@ -110,8 +118,9 @@ select_support_mcl<t_b,t_pat_len>::select_support_mcl(const bit_vector* f_v):sel
 {
     if (t_pat_len>1 or(v!=nullptr and  v->size() < 100000))
         init_slow(v);
-    else
+    else {
         init_fast(v);
+   }
     return;
 }
 
@@ -261,91 +270,289 @@ void select_support_mcl<t_b,t_pat_len>::init_slow(const bit_vector* v)
         }
     }
 }
+template<uint8_t t_b, uint8_t t_pat_len>
+typename select_support_mcl<t_b,t_pat_len>::size_type select_support_mcl<t_b,t_pat_len>::sum_args_serial(size_type s, size_type e) {
+	size_type result = 0;
+	const uint64_t* data = m_v->data();
+	uint64_t carry = 0;
+	// first partial block
+	while (s % 64 != 0 && e < s) {
+		if (select_support_trait<t_b, t_pat_len>::found_arg(s, *m_v)) 
+			result++;
+		s++;
+	}
+	// get carry
+	if (s > 63) {
+		select_support_trait<t_b, t_pat_len>::args_in_the_word(data[s/64-1], carry);	
+	}
+	// sum blockwise
+	while (s/64 < e/64) {
+		result += select_support_trait<t_b, t_pat_len>::args_in_the_word(data[s/64], carry);
+		s += 64;
+	}
+	// last partial block
+	while (s < e) {
+		if (select_support_trait<t_b, t_pat_len>::found_arg(s, *m_v)) 
+			result++;
+		s++;
+	}	
+	return result;
+}
 
-// TODO: find bug, detected by valgrind
+
+template<uint8_t t_b, uint8_t t_pat_len>
+void select_support_mcl<t_b,t_pat_len>::init_superblock_serial(
+		int_vector<64>& blockstarts, 
+		int_vector<64>& blockends, 
+		size_type arg_cnt, 
+		std::pair<uint32_t, uint32_t>* sb_to_chunk, 
+		uint32_t chunk_id, 
+		size_type s, size_type e, 
+		const size_type SUPER_BLOCK_SIZE) {
+	const uint64_t* data = m_v->data();
+	uint64_t carry = 0;
+	// first partial block
+	//while (s % 64 != 0 && s < e) {
+	while (s < e) {
+		if (select_support_trait<t_b,t_pat_len>::found_arg(s, *m_v)) {
+			// Set end
+			if ((arg_cnt + 1) % SUPER_BLOCK_SIZE == 0) {
+				blockends[arg_cnt / SUPER_BLOCK_SIZE] = s; 
+				sb_to_chunk[arg_cnt / SUPER_BLOCK_SIZE].second = chunk_id;
+			}
+			// Set start
+			if (arg_cnt % SUPER_BLOCK_SIZE == 0 ) {
+				blockstarts[arg_cnt / SUPER_BLOCK_SIZE] = s; 
+				sb_to_chunk[arg_cnt / SUPER_BLOCK_SIZE].first = chunk_id;
+			}
+			arg_cnt++;
+			// special case for last block 
+			if (arg_cnt == m_arg_cnt) {
+				blockends[blockends.size()-1] = s; 
+				sb_to_chunk[blockends.size()-1].second = chunk_id;
+			}
+		}
+		s++;
+	}
+	if (arg_cnt == m_arg_cnt) return; 
+	// get carry
+	if (s > 63) {
+		select_support_trait<t_b, t_pat_len>::args_in_the_word(data[s/64-1], carry);	
+	}
+	size_type arg_cnt_old = arg_cnt;
+	uint64_t carry_old = carry;
+	// Traverse blockwise
+	while (s/64 < e/64) {
+		arg_cnt += select_support_trait<t_b, t_pat_len>::args_in_the_word(data[s/64], carry);	
+		// if start of a superblock is in the current block 
+		if ((arg_cnt-1) / SUPER_BLOCK_SIZE != (arg_cnt_old-1)/SUPER_BLOCK_SIZE) {
+			size_type block_num = (arg_cnt-1) / SUPER_BLOCK_SIZE;
+			blockstarts[block_num] = s + select_support_trait<t_b, t_pat_len>::ith_arg_pos_in_the_word(data[s/64],
+				       	block_num * SUPER_BLOCK_SIZE - arg_cnt_old+1, carry_old);			
+			sb_to_chunk[block_num].first = chunk_id;
+		}
+		// if end of a superblock is in the current block
+		if (arg_cnt / SUPER_BLOCK_SIZE != arg_cnt_old / SUPER_BLOCK_SIZE) {
+			// id of block which just started
+			size_type block_num = arg_cnt / SUPER_BLOCK_SIZE;
+			blockends[block_num-1] = s + select_support_trait<t_b, t_pat_len>::ith_arg_pos_in_the_word(data[s/64],
+				       	block_num * SUPER_BLOCK_SIZE - arg_cnt_old, carry_old);			
+			sb_to_chunk[block_num-1].second = chunk_id;
+		}
+		// special case for last block
+		if (arg_cnt == m_arg_cnt && arg_cnt_old < arg_cnt) {
+			blockends[blockends.size()-1] = s + select_support_trait<t_b, t_pat_len>::ith_arg_pos_in_the_word(data[s/64],
+					arg_cnt - arg_cnt_old, carry_old);
+			sb_to_chunk[blockends.size()-1].second = chunk_id;
+			break; // Important to stop after last argument
+		}
+		arg_cnt_old = arg_cnt;
+		carry_old = carry;		
+		s += 64;
+	}	
+	// last partial block
+	while (s < e) {
+		if (select_support_trait<t_b,t_pat_len>::found_arg(s, *m_v)) {
+			// Set end
+			if ((arg_cnt + 1) % SUPER_BLOCK_SIZE == 0) {
+				blockends[arg_cnt / SUPER_BLOCK_SIZE] = s;
+				sb_to_chunk[arg_cnt / SUPER_BLOCK_SIZE].second = chunk_id;
+			}
+			// Set start
+			if (arg_cnt % SUPER_BLOCK_SIZE == 0 ) {
+				blockstarts[arg_cnt / SUPER_BLOCK_SIZE] = s;
+				sb_to_chunk[arg_cnt / SUPER_BLOCK_SIZE].first = chunk_id;
+			}
+			arg_cnt++;
+			// special case for last block 
+			if (arg_cnt == m_arg_cnt) {
+				blockends[blockends.size()-1] = s;
+				sb_to_chunk[blockends.size()-1].second = chunk_id;
+			}
+		}	
+		s++;
+	}
+}
+
+template<uint8_t t_b, uint8_t t_pat_len>
+void select_support_mcl<t_b,t_pat_len>::init_longblock_serial(int_vector<64>& longblock, size_type s, size_type e, size_type offset) {
+	size_type arg_cnt = offset;	
+	const uint64_t* data = v->data();
+	uint64_t carry = 0;
+	// first partial block
+	while (s % 64 != 0 && s < e) {
+		if (select_support_trait<t_b, t_pat_len>::found_arg(s, *v)) {
+			longblock[arg_cnt] = s;
+			arg_cnt++;
+		}	
+		s++;
+	}
+	// init carry
+	if (s > 63) {
+		select_support_trait<t_b, t_pat_len>::args_in_the_word(data[s/64-1], carry);
+	}
+	uint64_t carry_old = carry;
+	size_type arg_cnt_old = arg_cnt;
+	while (s/64 < e/64) {	
+		arg_cnt += select_support_trait<t_b, t_pat_len>::args_in_the_word(data[s/64], carry);
+		for (size_type j = 1; j <= arg_cnt - arg_cnt_old; j++) {	
+			longblock[arg_cnt_old+j-1] = s + select_support_trait<t_b, t_pat_len>::ith_arg_pos_in_the_word(data[s/64], j, carry_old);
+		}
+		arg_cnt_old = arg_cnt;
+		carry_old = carry;
+		s += 64;
+	}
+	// last partial block
+	if ( s > e) s -= 64;
+	while (s < e) {
+		if (select_support_trait<t_b, t_pat_len>::found_arg(s, *v)) {
+			longblock[arg_cnt] = s;
+			arg_cnt++;
+		}	
+		s++;
+	}
+}
+// Sample the delta to start of every 64 argument
+template<uint8_t t_b, uint8_t t_pat_len>
+void select_support_mcl<t_b,t_pat_len>::init_miniblock_serial(int_vector<0>& miniblock, size_type s, size_type e) {
+const uint64_t* data = v->data();
+uint64_t carry, carry_old;
+carry = carry_old = 0;
+size_type arg_cnt, arg_cnt_old;
+arg_cnt = arg_cnt_old = 0;
+size_type i = s;
+
+// First partial block
+while (i % 64 != 0 && i < e) {
+	if (select_support_trait<t_b, t_pat_len>::found_arg(i, *v)) {
+		if (arg_cnt % 64 == 0) {
+			miniblock[arg_cnt/64] = i-s;	
+		}	
+		arg_cnt++;
+	}
+	i++;
+}
+arg_cnt_old = arg_cnt;
+// blockwise
+while (i/64 < e/64) {
+	arg_cnt += select_support_trait<t_b, t_pat_len>::args_in_the_word(data[i/64], carry);
+	if ((arg_cnt-1)/64 != (arg_cnt_old-1)/64) {
+		miniblock[(arg_cnt-1)/64] = i-s + select_support_trait<t_b, t_pat_len>::ith_arg_pos_in_the_word(data[i/64], 64 - ((arg_cnt_old-1)%64) , carry_old);	
+	}
+	arg_cnt_old = arg_cnt;
+	carry_old = carry;
+	i += 64;
+} 
+
+// Rest of the interval
+while (i < e) {
+	if (select_support_trait<t_b, t_pat_len>::found_arg(i, *v)) {
+		if (arg_cnt % 64 == 0) {
+			miniblock[arg_cnt/64] = i-s;	
+		}	
+		arg_cnt++;
+	}
+	i++;
+}
+}
+
 template<uint8_t t_b, uint8_t t_pat_len>
 void select_support_mcl<t_b,t_pat_len>::init_fast(const bit_vector* v)
 {
-    set_vector(v);
-    initData();
-    if (m_v==nullptr)
-        return;
-    // Count the number of arguments in the bit vector
-    m_arg_cnt = select_support_trait<t_b,t_pat_len>::arg_cnt(*v);
+set_vector(v);
+initData();
+if (m_v==nullptr)
+return;
+//    m_arg_cnt = select_support_trait<t_b,t_pat_len>::arg_cnt(*v); 
+// Calculate prefix sum blockwise over sum args 
+size_type num_blocks = nblocks(v->size(), _SCAN_BSIZE<<3); 
+bit_vector::size_type *block_sum_arg = new bit_vector::size_type[num_blocks];
+bit_vector::size_type s = 0;
+bit_vector::size_type e = v->size();
+blocked_for (i, s, e, _SCAN_BSIZE<<3, 
+	 block_sum_arg[i] = sum_args_serial(s, e););
+m_arg_cnt =  sequence::scan(block_sum_arg, block_sum_arg, num_blocks, utils::addF<bit_vector::size_type>(), 0);
 
-    const size_type SUPER_BLOCK_SIZE = 64*64;
 
-    if (m_arg_cnt==0) // if there are no arguments in the vector we are done...
-        return;
+
+const size_type SUPER_BLOCK_SIZE = 64*64;
+
+if (m_arg_cnt==0) // if there are no arguments in the vector we are done...
+return;
 
 //    size_type sb = (m_arg_cnt+63+SUPER_BLOCK_SIZE-1)/SUPER_BLOCK_SIZE; // number of superblocks, add 63 as the last block could contain 63 uninitialized bits
-    size_type sb = (m_arg_cnt+SUPER_BLOCK_SIZE-1)/SUPER_BLOCK_SIZE; // number of superblocks
-    if (m_miniblock != nullptr) delete [] m_miniblock;
-    m_miniblock = new int_vector<0>[sb];
+size_type sb = (m_arg_cnt+SUPER_BLOCK_SIZE-1)/SUPER_BLOCK_SIZE; // number of superblocks
+if (m_miniblock != nullptr) delete [] m_miniblock;
+m_miniblock = new int_vector<0>[sb];
+if (m_longsuperblock != nullptr) delete [] m_longsuperblock;
+m_longsuperblock = new int_vector<0>[sb+1];
 
-    m_superblock = int_vector<0>(sb, 0, m_logn);// TODO: hier koennte man logn noch optimieren...s
+int_vector<64> superblockstart(sb, 0, m_logn); 
+int_vector<64> superblockend(sb, 0); 
 
-    bit_vector::size_type arg_position[SUPER_BLOCK_SIZE];
-    const uint64_t* data = v->data();
-    uint64_t carry_new=0;
-    size_type last_k64 = 1, sb_cnt=0;
-    for (size_type i=0, cnt_old=0, cnt_new=0, last_k64_sum=1; i < v->capacity(); i+=64, ++data) {
-        cnt_new += select_support_trait<t_b, t_pat_len>::args_in_the_word(*data, carry_new);
-        if (cnt_new >= last_k64_sum) {
-            arg_position[last_k64-1] = i + select_support_trait<t_b, t_pat_len>::ith_arg_pos_in_the_word(*data, last_k64_sum  - cnt_old, carry_new);
-            last_k64 += 64;
-            last_k64_sum += 64;
+// Assings start and end chunk to every superblock
+std::pair<uint32_t, uint32_t>* sb_to_chunk = new std::pair<uint32_t, uint32_t>[sb];
+// Init m_superblock with blocked for 
+blocked_for (i, s, e, _SCAN_BSIZE<<3, 
+	init_superblock_serial(superblockstart, superblockend, block_sum_arg[i], sb_to_chunk, i, s, e, SUPER_BLOCK_SIZE);
+	);
+// Calculate long/miniblocks 
+parallel_for (uint32_t i = 0; i < sb; ++i) {
+	size_type cnt_s = superblockstart[i];
+	size_type cnt_e = superblockend[i];
+	if (cnt_e - cnt_s > m_logn4) { // Long
+		m_longsuperblock[i] = int_vector<0>(SUPER_BLOCK_SIZE, 0, bits::hi(cnt_e) + 1);
+		int_vector<64> temp_longblock = int_vector<64>(SUPER_BLOCK_SIZE, 0);
+		// Do chunks in parallel
+		for (uint32_t c = sb_to_chunk[i].first; c <= sb_to_chunk[i].second; ++c) {
+			size_type cur_start = std::max(cnt_s, (size_type)c * (_SCAN_BSIZE<<3));
+			size_type cur_end = std::min(cnt_e +1, (size_type)(c+1)*(_SCAN_BSIZE<<3));
+			size_type cur_offset = cur_start == cnt_s ? 0 : (block_sum_arg[c] - i*SUPER_BLOCK_SIZE); 
+			init_longblock_serial(temp_longblock, cur_start, cur_end, cur_offset);
+		}
+		for (uint32_t j = 0; j < SUPER_BLOCK_SIZE; j++) m_longsuperblock[i][j] = temp_longblock[j];
+	} else { // Miniblock
+		m_miniblock[i] = int_vector<0>(64, 0, bits::hi(cnt_e-cnt_s)+1);
+		init_miniblock_serial(m_miniblock[i], cnt_s, cnt_e+1);
+	}
+}
+delete[] sb_to_chunk;
+delete []block_sum_arg;
+m_superblock = int_vector<0>(sb, 0, m_logn);
+s = 0; e = sb;
+blocked_for (i, s, e, 64, 
+	for (bit_vector::size_type j = s; j < (bit_vector::size_type)e; j++) m_superblock[j] = superblockstart[j];);
 
-            if (last_k64 == SUPER_BLOCK_SIZE+1) {
-                m_superblock[sb_cnt] = arg_position[0];
-                size_type pos_of_last_arg_in_the_block = arg_position[last_k64-65];
-
-                for (size_type i=arg_position[last_k64-65]+1, j=last_k64-65; i < v->size() and j < SUPER_BLOCK_SIZE; ++i)
-                    if (select_support_trait<t_b,t_pat_len>::found_arg(i, *v)) {
-                        pos_of_last_arg_in_the_block = i;
-                        ++j;
-                    }
-                size_type pos_diff = pos_of_last_arg_in_the_block - arg_position[0];
-                if (pos_diff > m_logn4) { // long block
-                    if (m_longsuperblock == nullptr) m_longsuperblock = new int_vector<0>[sb+1]; // create longsuperblock
-                    // GEANDERT am 2010-07-17 +1 nach pos_of_last_arg..
-                    m_longsuperblock[sb_cnt] = int_vector<0>(SUPER_BLOCK_SIZE, 0, bits::hi(pos_of_last_arg_in_the_block) + 1);
-                    for (size_type j=arg_position[0], k=0; k < SUPER_BLOCK_SIZE and j <= pos_of_last_arg_in_the_block; ++j)
-                        if (select_support_trait<t_b, t_pat_len>::found_arg(j, *v)) {
-                            if (k>=SUPER_BLOCK_SIZE) {
-                                for (size_type ii=0; ii < SUPER_BLOCK_SIZE; ++ii) {
-                                    std::cout<<"("<<ii<<","<<m_longsuperblock[sb_cnt][ii]<<") ";
-                                }
-                                std::cout << std::endl;
-                                std::cout<<"k="<<k<<" SUPER_BLOCK_SIZE="<<SUPER_BLOCK_SIZE<<std::endl;
-                                std::cout<<"pos_of_last_arg_in_the_block"<< pos_of_last_arg_in_the_block<<std::endl;
-                                std::cout.flush();
-                            }
-                            m_longsuperblock[sb_cnt][k++] = j;
-                        }
-                } else {
-                    m_miniblock[sb_cnt] = int_vector<0>(64, 0, bits::hi(pos_diff)+1);
-                    for (size_type j=0; j < SUPER_BLOCK_SIZE; j+=64) {
-                        m_miniblock[sb_cnt][j/64] = arg_position[j]-arg_position[0];
-                    }
-                }
-                ++sb_cnt;
-                last_k64 = 1;
-            }
-        }
-        cnt_old = cnt_new;
-    }
-    // handle last block: append long superblock
-    if (last_k64 > 1) {
-        if (m_longsuperblock == nullptr) m_longsuperblock = new int_vector<0>[sb+1]; // create longsuperblock
-        m_longsuperblock[sb_cnt] = int_vector<0>(SUPER_BLOCK_SIZE, 0, bits::hi(v->size()-1) + 1);
-        for (size_type i=arg_position[0],k=0; i < v->size(); ++i) {
-            if (select_support_trait<t_b, t_pat_len>::found_arg(i, *v)) {
-                m_longsuperblock[sb_cnt][k++] = i;
-            }
-        }
-        ++sb_cnt;
-    }
+// TODO do this in parallel
+bool empty = true;
+for (uint32_t i = 0; i < sb && empty; i++) {
+	if (m_longsuperblock[i].size() > 0)
+		empty = false;
+}
+if (empty) {
+	delete []m_longsuperblock;
+	m_longsuperblock = nullptr;
+}
 }
 
 

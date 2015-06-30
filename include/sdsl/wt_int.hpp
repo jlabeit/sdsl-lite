@@ -1,5 +1,5 @@
 /* sdsl - succinct data structures library
-    Copyright (C) 2009 Simon Gog
+Copyright (C) 2009 Simon Gog
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -20,8 +20,8 @@
            less memory than the wt_pc class for large alphabets.
     \author Simon Gog, Shanika Kuruppu
 */
-#ifndef INCLUDED_SDSL_INT_WAVELET_TREE
-#define INCLUDED_SDSL_INT_WAVELET_TREE
+#ifndef INCLUDED_SDSL_INT_WAVELET_TREE_PAR
+#define INCLUDED_SDSL_INT_WAVELET_TREE_PAR
 
 #include "sdsl_concepts.hpp"
 #include "int_vector.hpp"
@@ -29,6 +29,7 @@
 #include "select_support_mcl.hpp"
 #include "wt_helper.hpp"
 #include "util.hpp"
+
 #include <set> // for calculating the alphabet size
 #include <map> // for mapping a symbol to its lexicographical index
 #include <algorithm> // for std::swap
@@ -78,12 +79,13 @@ class wt_int
         typedef std::vector<point_type>              point_vec_type;
         typedef std::pair<size_type, point_vec_type> r2d_res_type;
 
-
+	// TODO only public for testing 
+        bit_vector_type        m_tree;         // bit vector to store the wavelet tree
     protected:
 
         size_type              m_size  = 0;
         size_type              m_sigma = 0;    //<- \f$ |\Sigma| \f$
-        bit_vector_type        m_tree;         // bit vector to store the wavelet tree
+        //bit_vector_type        m_tree;         // bit vector to store the wavelet tree
         rank_1_type            m_tree_rank;    // rank support for the wavelet tree bit vector
         select_1_type          m_tree_select1; // select support for the wavelet tree bit vector
         select_0_type          m_tree_select0;
@@ -154,6 +156,92 @@ class wt_int
                 _interval_symbols(new_i, new_j, k, cs, rank_c_i, rank_c_j, level+1, (path<<1)|1, new_node_size, new_offset);
             }
         }
+	inline void write_or(uint64_t *a, uint64_t b) {
+		volatile uint64_t newV,oldV;
+		do {oldV = *a; newV = oldV | b;}
+		while ((oldV != newV) && !utils::CAS(a, oldV, newV));
+	}
+
+#define THRESHOLD 10000
+        template<uint8_t int_width>
+	void build_recursive(size_type start, size_type length, 
+			int_vector<int_width>& source, int_vector<int_width>& destination, 
+			uint64_t* tree_data, 
+			std::atomic<size_type>& sigma,  
+			size_type l = 0) {
+		size_type level_offset = l*m_size;
+		uint64_t mask = 1LL << (m_max_level -l -1);
+		size_type my_offset = start + level_offset;
+		size_type source_offset = start - my_offset;
+		size_type wt_begin = my_offset, wt_end = my_offset + length -1;
+		if (length < 128) {
+			for (size_type i = wt_begin; i <= wt_end; ++i) {
+				if (source[source_offset + i] & mask)
+					write_or(&tree_data[i/64], 1LL << (i % 64));
+			}
+
+		} else if (length < THRESHOLD) {
+			size_type word = wt_begin/64;
+			while (wt_begin%64) { // share first word
+				if (source[source_offset + wt_begin] & mask) write_or(&tree_data[word], 1LL << (wt_begin % 64));		
+				wt_begin++;
+			}
+			if (word != wt_end/64) { // check if first and last word are different
+				word = wt_end/64;
+				while (wt_end%64 != 63) { // share last word
+					if (source[source_offset + wt_end] & mask) write_or(&tree_data[word], 1LL << (wt_end % 64));
+					wt_end--;
+				}
+			}
+			// write the rest
+			for (size_type i = wt_begin; i <= wt_end; i++) {
+				if (source[source_offset+i] & mask)
+					tree_data[i/64] |= 1LL << (i % 64);
+			}
+		} else {
+			size_type word = wt_begin/64;
+			while (wt_begin%64) { // share first word
+				if (source[source_offset + wt_begin] & mask) write_or(&tree_data[word], 1LL << (wt_begin % 64));		
+				wt_begin++;
+			}
+			word = wt_end/64;
+			while (wt_end%64 != 63) { // share last word
+				if (source[source_offset + wt_end] & mask) write_or(&tree_data[word], 1LL << (wt_end % 64));
+				wt_end--;
+			}
+			// Write rest in parallel
+			size_type start_word = wt_begin/64, end_word = wt_end/64;
+			parallel_for (size_type k = start_word; k <= end_word; ++k) {
+				size_type b = 64*k;
+				for (size_type i = b; i < b + 64; i++) {
+					if (source[source_offset + i] & mask) tree_data[k] |= 1LL << (i % 64);
+				}
+
+			}
+		}
+		// Reset begin and end
+		wt_begin = my_offset;
+		wt_end =  my_offset + length -1;
+		// input offset is negative offset
+		size_type right_start = sequence::pack2Bit(source, -level_offset, destination, start, tree_data, wt_begin, wt_end +1);
+
+		if (right_start) {
+			size_type left_child_start = start;
+			size_type left_child_length = right_start;
+			if (l+1 < m_max_level)
+				cilk_spawn this->build_recursive(left_child_start, left_child_length, destination, source, tree_data, sigma, l+1);
+			else
+				sigma++;
+		} 
+		if (length - right_start) {
+			size_type right_child_start = start + right_start;
+			size_type right_child_length = length - right_start;
+			if (l+1 < m_max_level)
+				build_recursive(right_child_start, right_child_length, destination, source, tree_data, sigma, l+1);
+			else 
+				sigma++;
+		}
+	}
 
     public:
 
@@ -166,9 +254,9 @@ class wt_int
             init_buffers(m_max_level);
         };
 
-        //! Semi-external constructor
-        /*! \param buf         File buffer of the int_vector for which the wt_int should be build.
-         *  \param size        Size of the prefix of v, which should be indexed.
+
+        //! In-memory constructor
+        /*! \param buf         int_vector for which the wt_int should be build.
          *  \param max_level   Maximal level of the wavelet tree. If set to 0, determined automatically.
          *    \par Time complexity
          *        \f$ \Order{n\log|\Sigma|}\f$, where \f$n=size\f$
@@ -177,8 +265,9 @@ class wt_int
          *        \f$ n\log|\Sigma| + O(1)\f$ bits, where \f$n=size\f$.
          */
         template<uint8_t int_width>
-        wt_int(int_vector_buffer<int_width>& buf, size_type size,
+        wt_int(int_vector<int_width>& buf, size_type size, 
                uint32_t max_level=0) : m_size(size) {
+	    assert(int_width == 8 || int_width == 16 || int_width == 32 || int_width == 64); // Alphabet has to be full words, or parallel writing makes problems
             init_buffers(m_max_level);
             if (0 == m_size)
                 return;
@@ -188,13 +277,14 @@ class wt_int
                 return;
             }
             m_sigma = 0;
-            int_vector<int_width> rac(m_size, 0, buf.width());
+            int_vector<int_width> s1(m_size, 0, buf.width());
+	    int_vector<int_width> s2(m_size, 0, buf.width());
 
             value_type x = 1;  // variable for the biggest value in rac
             for (size_type i=0; i < m_size; ++i) {
-                if (buf[i] > x)
-                    x = buf[i];
-                rac[i] = buf[i];
+                s1[i] = buf[i];
+                if (s1[i] > x)
+                    x = s1[i];
             }
 
             if (max_level == 0) {
@@ -203,71 +293,59 @@ class wt_int
                 m_max_level = max_level;
             }
             init_buffers(m_max_level);
-
-            // buffer for elements in the right node
-            int_vector_buffer<> buf1(tmp_file(buf.filename(), "_wt_constr_buf"),
-                                     std::ios::out, 10*(1<<20), buf.width());
-            std::string tree_out_buf_file_name = tmp_file(buf.filename(), "_m_tree");
-            osfstream tree_out_buf(tree_out_buf_file_name, std::ios::binary|
-                                   std::ios::trunc|std::ios::out);
-
             size_type bit_size = m_size*m_max_level;
-            tree_out_buf.write((char*) &bit_size, sizeof(bit_size));// write size of bit_vector
-
-            size_type tree_pos = 0;
-            uint64_t tree_word = 0;
-
-            uint64_t mask_old = 1ULL<<(m_max_level);
-            for (uint32_t k=0; k<m_max_level; ++k) {
-                size_type          start     = 0;
-                const uint64_t    mask_new = 1ULL<<(m_max_level-k-1);
-                do {
-                    size_type i           = start;
-                    size_type cnt0        = 0;
-                    size_type cnt1        = 0;
-                    uint64_t  start_value = (rac[i]&mask_old);
-                    uint64_t  x;
-                    while (i < m_size and((x=rac[i])&mask_old)==start_value) {
-                        if (x&mask_new) {
-                            tree_word |= (1ULL << (tree_pos&0x3FULL));
-                            buf1[cnt1++] = x;
-                        } else {
-                            rac[start + cnt0++ ] = x;
-                        }
-                        ++tree_pos;
-                        if ((tree_pos & 0x3FULL) == 0) { // if tree_pos % 64 == 0 write old word
-                            tree_out_buf.write((char*) &tree_word, sizeof(tree_word));
-                            tree_word = 0;
-                        }
-                        ++i;
-                    }
-                    if (k+1 < m_max_level) { // inner node
-                        for (size_type j=0; j<cnt1; ++j) {
-                            rac[start+cnt0+j] = buf1[j];
-                        }
-                    } else { // leaf node
-                        m_sigma += (cnt0>0) + (cnt1>0); // increase sigma for each leaf
-                    }
-                    start += cnt0+cnt1;
-                } while (start < m_size);
-                mask_old += mask_new;
-            }
-            if ((tree_pos & 0x3FULL) != 0) { // if tree_pos % 64 > 0 => there are remaining entries we have to write
-                tree_out_buf.write((char*) &tree_word, sizeof(tree_word));
-            }
-            buf1.close(true); // remove temporary file
-            tree_out_buf.close();
-            rac.resize(0);
-            bit_vector tree;
-            load_from_file(tree, tree_out_buf_file_name);
-            sdsl::remove(tree_out_buf_file_name);
-            m_tree = bit_vector_type(std::move(tree));
+	    m_tree = bit_vector_type(bit_size);
+	    std::atomic<size_type> sigma(0); 
+	    build_recursive(0, m_size, s1, s2, (uint64_t*)m_tree.data(), sigma, 0);
+	    m_sigma = sigma.load();
             util::init_support(m_tree_rank, &m_tree);
             util::init_support(m_tree_select0, &m_tree);
             util::init_support(m_tree_select1, &m_tree);
+	    
         }
 
+
+        template<uint8_t int_width>
+        wt_int(int_vector_buffer<int_width>& buf, size_type size,
+               uint32_t max_level=0) : m_size(size) { 
+	    assert(int_width == 8 || int_width == 16 || int_width == 32 || int_width == 64); // Alphabet has to be full words, or parallel writing makes problems
+	    init_buffers(m_max_level);
+            if (0 == m_size)
+                return;
+            size_type n = buf.size();  // set n
+            if (n < m_size) {
+                throw std::logic_error("n="+util::to_string(n)+" < "+util::to_string(m_size)+"=m_size");
+                return;
+            }
+            m_sigma = 0;
+            int_vector<int_width> s1(m_size, 0, buf.width());
+	    int_vector<int_width> s2(m_size, 0, buf.width());
+
+            value_type x = 1;  // variable for the biggest value in rac
+            for (size_type i=0; i < m_size; ++i) {
+                s1[i] = buf[i];
+                if (s1[i] > x)
+                    x = s1[i];
+            }
+            if (max_level == 0) {
+                m_max_level = bits::hi(x)+1; // max_level bits to represent all values range [0..x]
+            } else {
+                m_max_level = max_level;
+            }
+            init_buffers(m_max_level);
+
+            size_type bit_size = m_size*m_max_level;
+	    m_tree = bit_vector_type(bit_size); // TODO parallel init 
+	    std::atomic<size_type> sigma(0); 
+	    build_recursive(0, m_size, s1, s2, (uint64_t*)m_tree.data(), sigma, 0);
+	    m_sigma = sigma.load();
+            util::init_support(m_tree_rank, &m_tree);
+            util::init_support(m_tree_select0, &m_tree);
+            util::init_support(m_tree_select1, &m_tree);
+	}
+
         //! Copy constructor
+	//
         wt_int(const wt_int& wt) {
             copy(wt);
         }
@@ -328,6 +406,8 @@ class wt_int
         bool empty()const {
             return m_size == 0;
         }
+	// TODO remove this again
+	bit_vector* get_m_tree() { return &m_tree; }
 
         //! Recovers the i-th symbol of the original vector.
         /*! \param i The index of the symbol in the original vector.
@@ -336,7 +416,7 @@ class wt_int
          *       \f$ i < size() \f$
          */
         value_type operator[](size_type i)const {
-            assert(i < size());
+            assert(i <= size());
             size_type offset = 0;
             value_type res = 0;
             size_type node_size = m_size;
@@ -856,7 +936,9 @@ class wt_int
             auto v_sp_rank = m_tree_rank(v.offset);  // this is already calculated in expand(v)
             range_vec_type res(ranges.size());
             size_t i = 0;
-            for (auto& r : ranges) {
+            //for (auto& r : ranges) {
+	    for (auto it = ranges.begin(); it != ranges.end(); ++it) {
+		auto& r = *it;
                 auto sp_rank    = m_tree_rank(v.offset + r.first);
                 auto right_size = m_tree_rank(v.offset + r.second + 1)
                                   - sp_rank;

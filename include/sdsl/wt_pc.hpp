@@ -29,6 +29,7 @@
 #include <vector>
 #include <utility>
 #include <tuple>
+#include "sequence.hpp"
 
 //! Namespace for the succinct data structure library.
 namespace sdsl
@@ -121,7 +122,6 @@ class wt_pc
         }
 
 
-
         // calculates the tree shape returns the size of the WT bit vector
         size_type construct_tree_shape(const std::vector<size_type>& C) {
             // vector  for node of the tree
@@ -136,8 +136,8 @@ class wt_pc
         }
 
         void construct_init_rank_select() {
-            util::init_support(m_bv_rank, &m_bv);
-            util::init_support(m_bv_select0, &m_bv);
+            cilk_spawn util::init_support(m_bv_rank, &m_bv);
+            cilk_spawn util::init_support(m_bv_select0, &m_bv);
             util::init_support(m_bv_select1, &m_bv);
         }
 
@@ -177,6 +177,80 @@ class wt_pc
                 }
             }
         }
+	inline void write_or(uint64_t *a, uint64_t b) {
+		volatile uint64_t newV,oldV;
+		do {oldV = *a; newV = oldV | b;}
+		while ((oldV != newV) && !utils::CAS(a, oldV, newV));
+	}
+
+#define THRESHOLD 10000
+
+	// Build wavelet tree recursively level by level 
+	void build_recursive(size_type start, size_type length,
+			int_vector<tree_strat_type::int_width>& source, 
+			int_vector<tree_strat_type::int_width>& destination,
+			uint64_t* tree_data,
+			std::vector<uint64_t>& bv_node_pos, 
+			node_type v, // = m_tree.root()
+			size_type l = 0) {
+		uint64_t mask = (1LL << l);
+		size_type wt_begin = bv_node_pos[v];	
+		size_type wt_end = wt_begin + length - 1;
+		size_type source_offset = start - wt_begin;
+		if (length < 128) {
+			for (size_type i = wt_begin; i <= wt_end; ++i) {
+				if ( m_tree.bit_path(source[i+source_offset]) & mask)
+					write_or(&tree_data[i/64], 1LL << (i % 64));
+			}
+		} else {
+			size_type word = wt_begin/64;
+			while (wt_begin%64) { // share first word
+				if (m_tree.bit_path(source[source_offset + wt_begin]) & mask)
+					write_or(&tree_data[word], 1LL << (wt_begin % 64));
+
+				wt_begin++;
+			}
+			if (word != wt_end/64) { // if last word different then first
+				word = wt_end/64;
+				while (wt_end%64 != 63) { // share last word
+					
+					if (m_tree.bit_path(source[source_offset + wt_end]) & mask)
+						write_or(&tree_data[word], 1LL << (wt_end % 64));
+					wt_end--;
+				}
+			}
+			if (length < THRESHOLD) {
+				// write the rest
+				for (size_t i = wt_begin; i <= wt_end; i++) {
+					if (m_tree.bit_path(source[source_offset+i]) & mask)
+						tree_data[i/64] |= 1LL << (i%64);
+				}
+			} else { // Real parallel code
+				size_type start_word = wt_begin/64, end_word = wt_end/64;
+				parallel_for (size_type k = start_word; k <= end_word; ++k) {
+					size_type b = 64*k;
+					for (size_type i = b; i < b + 64; ++i) {
+						if (m_tree.bit_path(source[source_offset+i]) & mask)
+							tree_data[k] |= 1LL << (i % 64);
+					}
+				}
+
+			}
+		}
+		// If not leaf make recursive calls 
+		if (!m_tree.is_leaf(v)) {
+			// Reset begin and end
+			wt_begin = bv_node_pos[v];
+			wt_end = wt_begin + length-1;
+			size_type right_start = sequence::pack2Bit(source, start-wt_begin, destination, start, tree_data, wt_begin, wt_end+1);
+			if (right_start) {
+				cilk_spawn this->build_recursive(start, right_start, destination, source, tree_data, bv_node_pos, m_tree.child(v,0) , l+1);
+			}
+			if (length - right_start) {
+				build_recursive(start + right_start, length - right_start, destination, source, tree_data, bv_node_pos, m_tree.child(v,1), l+1);			
+			}
+		}
+	}
 
     public:
 
@@ -197,51 +271,45 @@ class wt_pc
               size_type size):m_size(size) {
             if (0 == m_size)
                 return;
+	    // For parallel construction buffer needs to be in memory
+	    int_vector<tree_strat_type::int_width> s1(m_size);
+	    int_vector<tree_strat_type::int_width> s2(m_size);
+	    // Has to be sequential because may be on disk 
+	    for (size_type i = 0;i < m_size; i++) {
+		s1[i] = input_buf[i];
+	    }
             // O(n + |\Sigma|\log|\Sigma|) algorithm for calculating node sizes
             // TODO: C should also depend on the tree_strategy. C is just a mapping
             // from a symbol to its frequency. So a map<uint64_t,uint64_t> could be
             // used for integer alphabets...
             std::vector<size_type> C;
             // 1. Count occurrences of characters
-            calculate_character_occurences(input_buf, m_size, C);
+            calculate_character_occurences(s1, m_size, C); // TODO count in parallel
             // 2. Calculate effective alphabet size
             calculate_effective_alphabet_size(C, m_sigma);
             // 3. Generate tree shape
             size_type tree_size = construct_tree_shape(C);
             // 4. Generate wavelet tree bit sequence m_bv
             bit_vector temp_bv(tree_size, 0);
-
+	
+	    // START PERFORMANCE CRITCAL
             // Initializing starting position of wavelet tree nodes
-            std::vector<uint64_t> bv_node_pos(m_tree.size(), 0);
-            for (size_type v=0; v < m_tree.size(); ++v) {
-                bv_node_pos[v] = m_tree.bv_pos(v);
-            }
+	    std::vector<uint64_t> bv_node_pos(m_tree.size(), 0);
+	    for (size_type v=0; v < m_tree.size(); ++v) {
+		bv_node_pos[v] = m_tree.bv_pos(v);
+	    }
             if (input_buf.size() < size) {
                 throw std::logic_error("Stream size is smaller than size!");
                 return;
             }
-            value_type old_chr = input_buf[0];
-            uint32_t times = 0;
-            for (size_type i=0; i < m_size; ++i) {
-                value_type chr = input_buf[i];
-                if (chr != old_chr) {
-                    insert_char(old_chr, bv_node_pos, times, temp_bv);
-                    times = 1;
-                    old_chr = chr;
-                } else { // chr == old_chr
-                    ++times;
-                    if (times == 64) {
-                        insert_char(old_chr, bv_node_pos, times, temp_bv);
-                        times = 0;
-                    }
-                }
-            }
-            if (times > 0) {
-                insert_char(old_chr, bv_node_pos, times, temp_bv);
-            }
+	    // start, len, source, destination, huff_tree_structure, output_wt
+	    build_recursive(0, m_size, s1, s2, (uint64_t*)temp_bv.data(), bv_node_pos, m_tree.root());
             m_bv = bit_vector_type(std::move(temp_bv));
             // 5. Initialize rank and select data structures for m_bv
             construct_init_rank_select();
+	    // END PERFORMANCE CRITICAL
+	    
+
             // 6. Finish inner nodes by precalculating the bv_pos_rank values
             m_tree.init_node_ranks(m_bv_rank);
         }
@@ -723,7 +791,9 @@ class wt_pc
             auto v_sp_rank = m_tree.bv_pos_rank(v);
             range_vec_type res(ranges.size());
             size_t i = 0;
-            for (auto& r : ranges) {
+            //for (auto& r : ranges) {
+	    for (auto it = ranges.begin(); it != ranges.end(); ++it) {
+		auto& r = *it;
                 auto sp_rank    = m_bv_rank(m_tree.bv_pos(v) + r.first);
                 auto right_size = m_bv_rank(m_tree.bv_pos(v) + r.second + 1)
                                   - sp_rank;
