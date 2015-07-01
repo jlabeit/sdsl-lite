@@ -335,10 +335,11 @@ class wt_int
             init_buffers(m_max_level);
 
             size_type bit_size = m_size*m_max_level;
-	    m_tree = bit_vector_type(bit_size); // TODO parallel init 
+	    bit_vector tree = bit_vector(bit_size); // TODO parallel init 
 	    std::atomic<size_type> sigma(0); 
-	    build_recursive(0, m_size, s1, s2, (uint64_t*)m_tree.data(), sigma, 0);
+	    build_recursive(0, m_size, s1, s2, (uint64_t*)tree.data(), sigma, 0);
 	    m_sigma = sigma.load();
+	    m_tree = bit_vector_type(std::move(tree));
             util::init_support(m_tree_rank, &m_tree);
             util::init_support(m_tree_select0, &m_tree);
             util::init_support(m_tree_select1, &m_tree);
