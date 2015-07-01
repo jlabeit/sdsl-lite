@@ -133,6 +133,7 @@ template <class ET>
 
 // The conditional should be removed by the compiler
 // this should work with pointer types, or pairs of integers
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
 template <class ET>
 inline bool CAS(ET *ptr, ET oldv, ET newv) {
   if (sizeof(ET) == 8) {
@@ -150,6 +151,7 @@ inline bool CAS(ET *ptr, ET oldv, ET newv) {
     abort();
   }
 }
+#pragma GCC diagnostic pop
 
 template <class ET>
 inline bool CAS_GCC(ET *ptr, ET oldv, ET newv) {
