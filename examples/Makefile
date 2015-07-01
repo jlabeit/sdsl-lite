@@ -1,6 +1,6 @@
 include ../Make.helper
-CXX_FLAGS=$(MY_CXX_FLAGS) $(MY_CXX_OPT_FLAGS) -I$(INC_DIR) -L$(LIB_DIR) 
-CCLIB=-lsdsl -ldivsufsort -ldivsufsort64 
+CXX_FLAGS=$(MY_CXX_FLAGS) $(PC_FLAGS) $(MY_CXX_OPT_FLAGS) -I$(INC_DIR) -L$(LIB_DIR) 
+CCLIB= $(PL_FLAGS) -lsdsl -ldivsufsort -ldivsufsort64 
 SOURCES=$(wildcard *.cpp)
 EXECS=$(SOURCES:.cpp=.x)
 
