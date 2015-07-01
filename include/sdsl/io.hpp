@@ -332,8 +332,8 @@ serialize_vector(const std::vector<T>& vec, std::ostream& out, sdsl::structure_t
     if (vec.size() > 0) {
         sdsl::structure_tree_node* child = sdsl::structure_tree::add_child(v, name, "std::vector<"+util::class_name(vec[0])+">");
         size_t written_bytes = 0;
-        for (const auto& x : vec) {
-            written_bytes += serialize(x, out, child, "[]");
+	for (auto it = vec.begin(); it != vec.end(); ++it) {
+            written_bytes += serialize(*it, out, child, "[]");
         }
         structure_tree::add_size(child, written_bytes);
         return written_bytes;
@@ -366,8 +366,8 @@ void write_structure(const X& x, std::ostream& out)
     nullstream ns;
     serialize(x, ns, st_node.get(), "");
     if (st_node.get()->children.size() > 0) {
-        for (const auto& child: st_node.get()->children) {
-            sdsl::write_structure_tree<F>(child.second.get(), out);
+	for (auto child = st_node.get()->children.begin(); child != st_node.get()->children.end(); ++child) {
+            sdsl::write_structure_tree<F>(child->second.get(), out);
         }
     }
 }

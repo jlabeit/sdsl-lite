@@ -304,8 +304,8 @@ class int_vector
         int_vector(std::initializer_list<t_T> il) : int_vector() {
             resize(il.size());
             size_type idx = 0;
-            for (auto x : il) {
-                (*this)[idx++] = x;
+	    for (auto it = il.beign(); it != il.end(); ++it) {
+                (*this)[idx++] = *it;
             }
         }
 
@@ -1113,8 +1113,8 @@ template<class t_bv>
 inline typename std::enable_if<std::is_same<typename t_bv::index_category ,bv_tag>::value, std::ostream&>::type
 operator<<(std::ostream& os, const t_bv& bv)
 {
-    for (auto b : bv) {
-        os << b;
+    for (auto b = bv.begin(); b != bv.end(); ++b) {
+        os << *b;
     }
     return os;
 }

@@ -674,7 +674,8 @@ class wm_int
             auto v_sp_rank = m_tree_rank(v.offset);  // this is already calculated in expand(v)
             range_vec_type res(ranges.size());
             size_t i = 0;
-            for (auto& r : ranges) {
+            for (auto it = ranges.begin(); it != ranges.end(); ++it) {
+		auto& r = *it;
                 auto sp_rank    = m_tree_rank(v.offset + r.first);
                 auto right_size = m_tree_rank(v.offset + r.second + 1)
                                   - sp_rank;
