@@ -304,7 +304,7 @@ class int_vector
         int_vector(std::initializer_list<t_T> il) : int_vector() {
             resize(il.size());
             size_type idx = 0;
-	    for (auto it = il.beign(); it != il.end(); ++it) {
+	    for (auto it = il.begin(); it != il.end(); ++it) {
                 (*this)[idx++] = *it;
             }
         }

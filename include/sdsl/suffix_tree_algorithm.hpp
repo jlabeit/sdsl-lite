@@ -228,8 +228,8 @@ double H0(const typename t_cst::node_type& v, const t_cst& cst)
     } else {
         double h0=0;
         auto n = cst.size(v);
-        for (const auto& child : cst.children(v)) {
-            double p = ((double)cst.size(child))/n;
+	for (auto child = cst.children(v).begin(); child != cst.children(v).end(); ++child) {
+            double p = ((double)cst.size(*child))/n;
             h0 -= p*log2(p);
         }
         return h0;

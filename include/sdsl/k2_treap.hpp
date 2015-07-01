@@ -175,16 +175,16 @@ class k2_treap
 
             auto max_element = [](int_vector_buffer<>& buf) {
                 uint64_t max_val = 0;
-                for (auto val : buf) {
-                    max_val = std::max((uint64_t)val, max_val);
+		for (auto val = buf.begin(); val != buf.end(); ++val) {
+                    max_val = std::max((uint64_t)*val, max_val);
                 }
                 return max_val;
             };
 
             auto max_buf_element = [&]() {
                 uint64_t max_v = 0;
-                for (auto buf : bufs) {
-                    uint64_t _max_v = max_element(*buf);
+		for (auto buf = bufs.begin(); buf != bufs.end(); ++buf) {
+                    uint64_t _max_v = max_element(**buf);
                     max_v = std::max(max_v, _max_v);
                 }
                 return max_v;

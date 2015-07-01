@@ -118,8 +118,8 @@ class top_k_iterator
                 m_pq.pop();
                 if (is_contained) {
                     auto nodes = m_treap->children(v);
-                    for (auto node : nodes)
-                        m_pq.emplace(node, true);
+		    for (auto node = nodes.begin(); node != nodes.end(); ++node)
+                        m_pq.emplace(*node, true);
                     m_point_val = t_point_val(v.max_p, v.max_v);
                     m_valid = true;
                     break;
@@ -128,8 +128,8 @@ class top_k_iterator
                         m_pq.emplace(v, true);
                     } else if (overlap<t_k2_treap::k>(m_p1, m_p2, v)) {
                         auto nodes = m_treap->children(v);
-                        for (auto node : nodes)
-                            m_pq.emplace(node, false);
+			for (auto node = nodes.begin(); node != nodes.end(); ++node)
+                            m_pq.emplace(*node, false);
                         if (contained(v.max_p, m_p1, m_p2)) {
                             m_point_val = t_point_val(v.max_p, v.max_v);
                             m_valid = true;
@@ -216,8 +216,8 @@ class range_iterator
                 m_pq.pop();
                 if (is_contained) {
                     auto nodes = m_treap->children(v);
-                    for (auto node : nodes)
-                        pq_emplace(node, true);
+		    for (auto node = nodes.begin(); node != nodes.end(); ++node)
+                        pq_emplace(*node, true);
                     if (v.max_v <= imag(m_r)) {
                         m_point_val = t_point_val(v.max_p, v.max_v);
                         m_valid = true;
@@ -228,8 +228,8 @@ class range_iterator
                         m_pq.emplace(v, true);
                     } else if (overlap<t_k2_treap::k>(m_p1, m_p2, v)) {
                         auto nodes = m_treap->children(v);
-                        for (auto node : nodes)
-                            pq_emplace(node, false);
+			for (auto node = nodes.begin(); node != nodes.end(); ++node)
+                            pq_emplace(*node, false);
                         if (contained(v.max_p, m_p1, m_p2) and v.max_v <= imag(m_r)) {
                             m_point_val = t_point_val(v.max_p, v.max_v);
                             m_valid = true;
@@ -343,8 +343,8 @@ _count(const t_k2_treap& treap,
     } else if (overlap<t_k2_treap::k>(p1, p2, v)) {
         uint64_t res = contained(v.max_p, p1, p2);
         auto nodes = treap.children(v);
-        for (auto node : nodes) {
-            res += _count(treap, p1, p2, node);
+	for (auto node = nodes.begin(); node != nodes.end(); ++node) {
+            res += _count(treap, p1, p2, *node);
         }
         return res;
     }
@@ -359,8 +359,8 @@ __count(const t_k2_treap& treap,
 {
     uint64_t res = 1; // count the point at the node
     auto nodes = treap.children(v);
-    for (auto node : nodes)
-        res += __count(treap, node);
+    for (auto node = nodes.begin(); node != nodes.end(); ++node)
+        res += __count(treap, *node);
     return res;
 }
 
@@ -399,8 +399,8 @@ construct_im(k2_treap<t_k, t_bv, t_rank, t_max_vec>& idx, std::vector<std::array
 {
     std::string tmp_prefix = ram_file_name("k2_treap_");
     std::vector<std::tuple<uint64_t,uint64_t,uint64_t>> d;
-    for (auto x : data) {
-        d.push_back(std::make_tuple(x[0],x[1],x[2]));
+    for (auto x = data.begin(); x != data.end(); ++x) {
+        d.push_back(std::make_tuple((*x)[0],(*x)[1],(*x)[2]));
     }
     k2_treap<t_k, t_bv, t_rank, t_max_vec> tmp(d, tmp_prefix);
     tmp.swap(idx);
