@@ -16,8 +16,8 @@ void run()
 {
     t_cst cst;
     construct_im(cst, "ananas", 1);
-    for (auto v : cst) {
-        output_node(v, cst);
+    for (auto v = cst.begin(); v != cst.end(); ++v) {
+        output_node(*v, cst);
     }
     cout<<"--"<<endl;
     auto v = cst.select_leaf(2);
