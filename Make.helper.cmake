@@ -1,3 +1,11 @@
+ifdef GCILK
+PC_FLAGS = -lcilkrts -fcilkplus -DCILKP
+PL_FLAGS = -lcilkrts -fcilkplus
+else ifdef OPENMP
+PC_FLAGS = -fopenmp -DOPENMP
+PL_FLAGS = -fopenmp
+endif
+
 LIB_DIR = @CMAKE_INSTALL_PREFIX@/lib
 INC_DIR = @CMAKE_INSTALL_PREFIX@/include
 MY_CXX_FLAGS=@CMAKE_CXX_FLAGS@ $(CODE_COVER)
