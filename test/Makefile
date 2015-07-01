@@ -1,11 +1,11 @@
 include ../Make.helper
-CXX_FLAGS=$(MY_CXX_FLAGS) -Wall -Werror -Wunused-parameter -g -O3 \
+CXX_FLAGS=$(MY_CXX_FLAGS) -Wall -Werror -Wunused-parameter -g -O3 $(PC_FLAGS) \
 		  -I$(INC_DIR) \
 		  -I../external/googletest/include \
 		  -L$(LIB_DIR) \
 		  -L../build/googletest/
 LIB_SDSL=$(LIB_DIR)/libsdsl.a
-CCLIB=-lsdsl -ldivsufsort -ldivsufsort64 -lgtest -lpthread
+CCLIB=$(PL_FLAGS) -lsdsl -ldivsufsort -ldivsufsort64 -lgtest -lpthread
 TMP_DIR=tmp
 SOURCES=$(wildcard *Test.cpp)
 EXECS=$(SOURCES:.cpp=.x)
