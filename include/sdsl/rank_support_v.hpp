@@ -91,7 +91,7 @@ class rank_support_v : public rank_support
 		    trait_type::args_in_the_word(data[(b<<3) - 1], m_basic_block[2*b]);
 	    }
 	    // Second pass to calculate all the block sums
-	    parallel_for (size_type b = 0; b <= (m_v->capacity()>>9); b++) {
+	    {parallel_for (size_type b = 0; b <= (m_v->capacity()>>9); b++) {
 		uint64_t carry = m_basic_block[2*b];
 		uint64_t sum = trait_type::args_in_the_word(data[b<<3], carry); 
 		uint64_t second_level_cnt = 0;
@@ -106,7 +106,7 @@ class rank_support_v : public rank_support
 		if (i % 8 != 0)  // Special case for last block
 			second_level_cnt |= sum<<(63-9*(i&0x7));	
 		m_basic_block[2*b+1] = second_level_cnt;
-	    }
+	    }}
 	    // exclusive prefix sum over the block_sums
 	    sequence::skip1<int_vector<64>, uint64_t, size_type> skp(m_basic_block);
 	    sequence::scan(skp, skp, (basic_block_size>>1), utils::addF<uint64_t>() ,   (uint64_t)0);
