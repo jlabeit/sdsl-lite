@@ -24,9 +24,7 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include "sac_config.hpp"
 #include "sac_divsufsort_private.hpp"
-#include "sac_quickSort.hpp" 
 
 
 /*- Private Functions -*/
@@ -43,13 +41,13 @@ static const saint_t lg_table[256]= {
 };
 
 #if (SS_BLOCKSIZE == 0) || (SS_INSERTIONSORT_THRESHOLD < SS_BLOCKSIZE)
-
 template<class saidx_t>
 static INLINE
 saint_t
 ss_ilg(saidx_t n) {
 #if SS_BLOCKSIZE == 0
-  if (sizeof(saidx_t) == 8) {
+//# if defined(BUILD_DIVSUFSORT64)
+if (sizeof(saidx_t) == 8) {
   return (n >> 32) ?
           ((n >> 48) ?
             ((n >> 56) ?
@@ -65,6 +63,7 @@ ss_ilg(saidx_t n) {
             ((n & 0x0000ff00) ?
                8 + lg_table[(n >>  8) & 0xff] :
                0 + lg_table[(n >>  0) & 0xff]));
+//# else
 } else {
   return (n & 0xffff0000) ?
           ((n & 0xff000000) ?
@@ -73,6 +72,7 @@ ss_ilg(saidx_t n) {
           ((n & 0x0000ff00) ?
              8 + lg_table[(n >>  8) & 0xff] :
              0 + lg_table[(n >>  0) & 0xff]);
+//# endif
 }
 #elif SS_BLOCKSIZE < 256
   return lg_table[n];
@@ -139,8 +139,8 @@ ss_isqrt(saidx_t x) {
 
 /*---------------------------------------------------------------------------*/
 
-template<class saidx_t>
 /* Compares two suffixes. */
+template<class saidx_t>
 static INLINE
 saint_t
 ss_compare(const sauchar_t *T,
@@ -160,18 +160,6 @@ ss_compare(const sauchar_t *T,
         (U2 < U2n ? *U1 - *U2 : 1) :
         (U2 < U2n ? -1 : 0);
 }
-
-template<class saidx_t>
-class ss_compare_class {
-	const sauchar_t* T;
-	const saidx_t* PA;
-	saidx_t depth;
-	public: 
-	ss_compare_class(const sauchar_t *T_, const saidx_t* PA_, saidx_t depth_): T(T_), PA(PA_), depth(depth_) {}
-	bool operator()(const saidx_t& a, const saidx_t& b) {
-		return 0 > ss_compare(T, PA + a, PA + b, depth);
-	}
-};
 
 
 /*---------------------------------------------------------------------------*/
@@ -236,11 +224,11 @@ ss_heapsort(const sauchar_t *Td, const saidx_t *PA, saidx_t *SA, saidx_t size) {
     if(Td[PA[SA[m / 2]]] < Td[PA[SA[m]]]) { SWAP(SA[m], SA[m / 2]); }
   }
 
-  for(i = m / 2 - 1; 0 <= i; --i) { ss_fixdown<saidx_t>(Td, PA, SA, i, m); }
-  if((size % 2) == 0) { SWAP(SA[0], SA[m]); ss_fixdown<saidx_t>(Td, PA, SA, 0, m); }
+  for(i = m / 2 - 1; 0 <= i; --i) { ss_fixdown(Td, PA, SA, i, m); }
+  if((size % 2) == 0) { SWAP(SA[0], SA[m]); ss_fixdown(Td, PA, SA, (saidx_t)0, m); }
   for(i = m - 1; 0 < i; --i) {
     t = SA[0], SA[0] = SA[i];
-    ss_fixdown<saidx_t>(Td, PA, SA, 0, i);
+    ss_fixdown(Td, PA, SA, (saidx_t)0, i);
     SA[i] = t;
   }
 }
@@ -355,7 +343,7 @@ ss_mintrosort(const sauchar_t *T, const saidx_t *PA,
     }
 
     Td = T + depth;
-    if(limit-- == 0) { ss_heapsort<saidx_t>(Td, PA, first, last - first); }
+    if(limit-- == 0) { ss_heapsort(Td, PA, first, (saidx_t)(last - first)); }
     if(limit < 0) {
       for(a = first + 1, v = Td[PA[*first]]; a < last; ++a) {
         if((x = Td[PA[*a]]) != v) {
@@ -579,7 +567,7 @@ ss_mergeforward(const sauchar_t *T, const saidx_t *PA,
   saint_t r;
 
   bufend = buf + (middle - first) - 1;
-  ss_blockswap<saidx_t>(buf, first, middle - first);
+  ss_blockswap(buf, first, (saidx_t)(middle - first));
 
   for(t = *(a = first), b = buf, c = middle;;) {
     r = ss_compare(T, PA + *b, PA + *c, depth);
@@ -632,7 +620,7 @@ ss_mergebackward(const sauchar_t *T, const saidx_t *PA,
   saint_t x;
 
   bufend = buf + (last - middle) - 1;
-  ss_blockswap<saidx_t>(buf, middle, last - middle);
+  ss_blockswap(buf, middle, (saidx_t)(last - middle));
 
   x = 0;
   if(*bufend < 0)       { p1 = PA + ~*bufend; x |= 1; }
@@ -786,26 +774,11 @@ sssort(const sauchar_t *T, const saidx_t *PA,
   saidx_t j, k, curbufsize, limit;
 #endif
   saidx_t i;
-  
+
   if(lastsuffix != 0) { ++first; }
-  //if(false) {
-  //if (last - first > 4*1024*1024) {
-	// Parallel sort
-	  //std::sort(first, last, 
-		  //[=] (const saidx_t& a, const saidx_t& b) { return 0 > ss_compare(T, PA + a, PA + b, depth);});
-//	ss_compare_class F(T, PA, depth);		
-	//quickSort(first, last-first, F); 
-	//parallel_for (saidx_t* it = first+1; it < last; ++it) {
-		//saidx_t a = *(it-1);
-		//if (a < 0)
-		//	a = ~a;
-		//saidx_t b = *it;
-		//if (ss_compare(T, PA + a, PA + b, depth) == 0)
-		//	*it = ~*it;
-	//}
-  //} else { 
+
 #if SS_BLOCKSIZE == 0
-    ss_mintrosort(T, PA, first, last, depth);
+  ss_mintrosort(T, PA, first, last, depth);
 #else
   if((bufsize < SS_BLOCKSIZE) &&
       (bufsize < (last - first)) &&
@@ -830,8 +803,8 @@ sssort(const sauchar_t *T, const saidx_t *PA,
   }
 #if SS_INSERTIONSORT_THRESHOLD < SS_BLOCKSIZE
   ss_mintrosort(T, PA, a, middle, depth);
-#elif 1 < SS_BLOCKSIZE 
-ss_insertionsort(T, PA, a, middle, depth);
+#elif 1 < SS_BLOCKSIZE
+  ss_insertionsort(T, PA, a, middle, depth);
 #endif
   for(k = SS_BLOCKSIZE; i != 0; k <<= 1, i >>= 1) {
     if(i & 1) {
@@ -848,7 +821,6 @@ ss_insertionsort(T, PA, a, middle, depth);
     ss_inplacemerge(T, PA, first, middle, last, depth);
   }
 #endif
-  //}
 
   if(lastsuffix != 0) {
     /* Insert last type B* suffix. */
