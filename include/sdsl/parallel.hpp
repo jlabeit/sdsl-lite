@@ -25,7 +25,7 @@ static void setWorkers(int n) { }
 #define parallel_for_1 _Pragma("cilk grainsize = 1") parallel_for
 #define parallel_for_256 _Pragma("cilk grainsize = 256") parallel_for
 
-/*
+
 static int getWorkers() {
   return __cilkrts_get_nworkers();
 }
@@ -37,7 +37,7 @@ static void setWorkers(int n) {
     std::cerr << "failed to set worker count!" << std::endl;
     std::abort();
   }
-}*/
+}
 
 // openmp
 #elif defined(OPENMP)
@@ -49,8 +49,8 @@ static void setWorkers(int n) {
 #define parallel_for_1 _Pragma("omp parallel for schedule (static,1)") for
 #define parallel_for_256 _Pragma("omp parallel for schedule (static,256)") for
 
-//static int getWorkers() { return omp_get_max_threads(); }
-//static void setWorkers(int n) { omp_set_num_threads(n); }
+static int getWorkers() { return omp_get_max_threads(); }
+static void setWorkers(int n) { omp_set_num_threads(n); }
 
 // c++
 #else
@@ -62,8 +62,8 @@ static void setWorkers(int n) {
 #define parallel_for_256 for
 #define cilk_for for
 
-//static int getWorkers() { return 1; }
-//static void setWorkers(int n) { }
+static int getWorkers() { return 1; }
+static void setWorkers(int n) { }
 
 #endif
 

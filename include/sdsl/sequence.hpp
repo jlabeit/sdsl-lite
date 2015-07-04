@@ -105,10 +105,10 @@ namespace sequence {
     intT _l = nblocks(_n,_bsize);			\
     parallel_for (intT _i = 0; _i < _l; _i++) {		\
       intT _s = _ss + _i * (_bsize);			\
-      intT _e = std::min(_s + (_bsize), _ee);			\
+      intT _e = std::min(_s + (_bsize), _ee);		\
       _body						\
 	}						\
-  }
+} 
 
 
 

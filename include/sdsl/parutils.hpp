@@ -42,7 +42,7 @@
 #define newA(__E,__n) (__E*) malloc((__n)*sizeof(__E))
 
 namespace utils {
-/*
+
 static void myAssert(int cond, std::string s) {
   if (!cond) {
     std::cout << s << std::endl;
@@ -72,7 +72,7 @@ static int logUpLong(unsigned long i) {
   while (b > 0) {b = b >> 1; a++;}
   return a;
 }
-*/
+
 
 inline unsigned int hash(unsigned int a)
 {

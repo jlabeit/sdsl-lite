@@ -303,10 +303,10 @@ class wt_pc
                 return;
             }
 	    // start, len, source, destination, huff_tree_structure, output_wt
-	    build_recursive(0, m_size, s1, s2, (uint64_t*)temp_bv.data(), bv_node_pos, m_tree.root());
+	    this->build_recursive(0, m_size, s1, s2, (uint64_t*)temp_bv.data(), bv_node_pos, m_tree.root());
             m_bv = bit_vector_type(std::move(temp_bv));
             // 5. Initialize rank and select data structures for m_bv
-            construct_init_rank_select();
+            this->construct_init_rank_select();
 	    // END PERFORMANCE CRITICAL
 	    
 
