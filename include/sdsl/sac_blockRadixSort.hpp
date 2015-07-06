@@ -107,11 +107,11 @@ namespace intSort {
 
     transpose<intT,intT>(cnts, oA).trans(blocks, m);
 
-    intT ss;
+    //intT ss;
     if (top)
-      ss = sequence::scan(oA, oA, blocks*m, utils::addF<intT>(),(intT)0);
+      sequence::scan(oA, oA, blocks*m, utils::addF<intT>(),(intT)0);
     else
-      ss = sequence::scanSerial(oA, oA, blocks*m, utils::addF<intT>(),(intT)0);
+      sequence::scanSerial(oA, oA, blocks*m, utils::addF<intT>(),(intT)0);
     //utils::myAssert(ss == n, "radixStep: sizes don't match");
 
     blockTrans<E,intT>(B, A, oB, oA, cnts).trans(blocks, m);
@@ -123,7 +123,7 @@ namespace intSort {
   // a function to extract "bits" bits starting at bit location "offset"
   template <class E, class F>
     struct eBits {
-      F _f;  intT _mask;  intT _offset;
+      intT _mask;  intT _offset; F _f;  
       eBits(int bits, intT offset, F f): _mask((1<<bits)-1), 
 					_offset(offset), _f(f) {}
       intT operator() (E p) {return _mask&(_f(p)>>_offset);}

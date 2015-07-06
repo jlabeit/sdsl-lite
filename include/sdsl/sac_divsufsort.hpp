@@ -130,7 +130,7 @@ void initBuckets(const sauchar_t *T, saidx_t *SA,
 			while (e < s && T[s] <= T[s+1]) s--; 
 		// it is ensured that s is set to a position of a A-type suffix
 		// loop goes past e until finding A-type suffix after a B-type suffix
-		for(saidx_t i = s, c0 = T[s]; e <= i; ) {
+		for(saidx_t i = s, c1 = c0 = T[s]; e <= i; ) {
 			do { 
 				if (i < e && c0 > c1) { // If next block can be sure it's a A-type suffix
 					i = -1;
@@ -173,7 +173,7 @@ void initBuckets(const sauchar_t *T, saidx_t *SA,
 			while (e < s && T[s] <= T[s+1]) s--; 
 		// it is ensured that s is set to a position of a A-type suffix
 		// loop goes past e until finding A-type suffix after a B-type suffix
-		for(saidx_t i = s, c0 = T[s]; e <= i; ) {
+		for(saidx_t i = s, c1 = c0 = T[s]; e <= i; ) {
 			do { 
 				if (i < e && c0 > c1) { // If next block can be sure it's a A-type suffix
 					i = -1;
