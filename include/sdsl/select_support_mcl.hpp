@@ -543,9 +543,8 @@ s = 0; e = sb;
 blocked_for (i, s, e, 64, 
 	for (bit_vector::size_type j = s; j < (bit_vector::size_type)e; j++) m_superblock[j] = superblockstart[j];);
 
-// TODO do this in parallel
 bool empty = true;
-for (uint32_t i = 0; i < sb && empty; i++) {
+parallel_for (uint32_t i = 0; i < sb; i++) {
 	if (m_longsuperblock[i].size() > 0)
 		empty = false;
 }
