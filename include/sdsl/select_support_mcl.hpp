@@ -379,7 +379,7 @@ void select_support_mcl<t_b,t_pat_len>::init_superblock_serial(
 				sb_to_chunk[arg_cnt / SUPER_BLOCK_SIZE].second = chunk_id;
 			}
 			// Set start
-			if (arg_cnt % SUPER_BLOCK_SIZE == 0 ) {
+			if (arg_cnt % SUPER_BLOCK_SIZE == 0 && arg_cnt < m_arg_cnt ) {
 				blockstarts[arg_cnt / SUPER_BLOCK_SIZE] = s;
 				sb_to_chunk[arg_cnt / SUPER_BLOCK_SIZE].first = chunk_id;
 			}
@@ -509,7 +509,6 @@ m_longsuperblock = new int_vector<0>[sb+1];
 
 int_vector<64> superblockstart(sb, 0, m_logn); 
 int_vector<64> superblockend(sb, 0); 
-
 // Assings start and end chunk to every superblock
 std::pair<uint32_t, uint32_t>* sb_to_chunk = new std::pair<uint32_t, uint32_t>[sb];
 // Init m_superblock with blocked for 
@@ -544,7 +543,7 @@ blocked_for (i, s, e, 64,
 	for (bit_vector::size_type j = s; j < (bit_vector::size_type)e; j++) m_superblock[j] = superblockstart[j];);
 
 bool empty = true;
-{parallel_for (uint32_t i = 0; i < sb; i++) {
+{parallel_for (uint64_t i = 0; i < sb; i++) {
 	if (m_longsuperblock[i].size() > 0)
 		empty = false;
 }}
