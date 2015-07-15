@@ -46,7 +46,7 @@ struct lcp_tree_and_lf_compressed_tag {};
 
 struct alphabet_tag {};
 struct byte_alphabet_tag { static const uint8_t WIDTH=8; };
-struct int_alphabet_tag { static const uint8_t WIDTH=0; };
+struct int_alphabet_tag { static const uint8_t WIDTH=32; };
 
 struct sa_sampling_tag {};
 struct isa_sampling_tag {};
