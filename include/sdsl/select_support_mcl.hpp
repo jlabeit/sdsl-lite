@@ -312,8 +312,8 @@ void select_support_mcl<t_b,t_pat_len>::init_superblock_serial(
 	const uint64_t* data = m_v->data();
 	uint64_t carry = 0;
 	// first partial block
-	//while (s % 64 != 0 && s < e) {
-	while (s < e) {
+	while (s % 64 != 0 && s < e) {
+	//while (s < e) {
 		if (select_support_trait<t_b,t_pat_len>::found_arg(s, *m_v)) {
 			// Set end
 			if ((arg_cnt + 1) % SUPER_BLOCK_SIZE == 0) {
