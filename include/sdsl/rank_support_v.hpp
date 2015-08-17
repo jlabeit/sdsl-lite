@@ -136,8 +136,7 @@ class rank_support_v : public rank_support
             return rank(idx);
         }
 
-        size_type size()const
-        {
+        size_type size()const {
             return m_v->size();
         }
 
