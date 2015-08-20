@@ -63,7 +63,7 @@ void construct_bwt(cache_config& config)
     uint8_t bwt_width = text.width();
 
     //  (2) Prepare to stream SA from disc and BWT to disc
-    size_type buffer_size = 64*1024*1024; // buffer_size is a multiple of 8!, TODO: still true?
+    size_type buffer_size = 16*1024*1024; // buffer_size is a multiple of 8!, TODO: still true?
     int_vector_buffer<> sa_buf(cache_file_name(conf::KEY_SA, config), std::ios::in, buffer_size);
     std::string bwt_file = cache_file_name(KEY_BWT, config);
     bwt_type bwt_buf(bwt_file, std::ios::out, buffer_size, bwt_width);
