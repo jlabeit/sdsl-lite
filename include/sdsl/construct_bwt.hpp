@@ -78,9 +78,13 @@ void construct_bwt(cache_config& config)
     //for (size_type i=0; i < n; ++i) {
     //    bwt_buf[i] = text[ sa_buf[i]+to_add[sa_buf[i]==0] ];
     //}
-    for (size_type b = 0; b <= n / buffer_size; b++) {
+    for (size_type b = 0; b <= n / buffer_size;) {
 	size_type s = b * buffer_size;
-	size_type e = std::min((b+1) * buffer_size, n);
+	size_type e;
+        do {
+		b++;
+		e = std::min(b * buffer_size, n);
+	} while (e < n && (e/buffer_size) % bwt_width != 0 && (e/buffer_size) % sa_width != 0);
 	bwt_buf[s] = text[ sa_buf[s] + to_add[sa_buf[s]==0] ];
 	parallel_for (size_type i = s; i < e; i++)
 		bwt_buf[i] = text[ sa_buf[i]+to_add[sa_buf[i]==0] ];
