@@ -508,7 +508,7 @@ if (m_longsuperblock != nullptr) delete [] m_longsuperblock;
 m_longsuperblock = new int_vector<0>[sb+1];
 
 int_vector<64> superblockstart(sb+1, 0); 
-int_vector<64> superblockend(sb+1, 0); 
+int_vector<64> superblockend(sb, 0); 
 // Assings start and end chunk to every superblock
 std::pair<uint64_t, uint64_t>* sb_to_chunk = new std::pair<uint64_t, uint64_t>[sb];
 // Init m_superblock with blocked for 
