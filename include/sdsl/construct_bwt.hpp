@@ -63,15 +63,22 @@ void construct_bwt(cache_config& config)
     uint8_t bwt_width = text.width();
 
     //  (2) Prepare to stream SA from disc and BWT to disc
-    size_type buffer_size = 1000000; // buffer_size is a multiple of 8!, TODO: still true?
+    size_type buffer_size = 64*1024*1024; // buffer_size is a multiple of 8!, TODO: still true?
     int_vector_buffer<> sa_buf(cache_file_name(conf::KEY_SA, config), std::ios::in, buffer_size);
     std::string bwt_file = cache_file_name(KEY_BWT, config);
     bwt_type bwt_buf(bwt_file, std::ios::out, buffer_size, bwt_width);
 
     //  (3) Construct BWT sequentially by streaming SA and random access to text
     size_type to_add[2] = {(size_type)-1,n-1};
-    for (size_type i=0; i < n; ++i) {
-        bwt_buf[i] = text[ sa_buf[i]+to_add[sa_buf[i]==0] ];
+    //for (size_type i=0; i < n; ++i) {
+    //    bwt_buf[i] = text[ sa_buf[i]+to_add[sa_buf[i]==0] ];
+    //}
+    for (size_type b = 0; b <= n / buffer_size; b++) {
+	size_type s = b * buffer_size;
+	size_type e = std::min((b+1) * buffer_size, n);
+	bwt_buf[s] = text[ sa_buf[s] + to_add[sa_buf[s]==0] ];
+	parallel_for (size_type i = s; i < e; i++)
+		bwt_buf[i] = text[ sa_buf[i]+to_add[sa_buf[i]==0] ];
     }
     bwt_buf.close();
     register_cache_file(KEY_BWT, config);
