@@ -67,8 +67,13 @@ void construct_bwt(cache_config& config)
     int_vector_buffer<> sa_buf(cache_file_name(conf::KEY_SA, config), std::ios::in, buffer_size);
     std::string bwt_file = cache_file_name(KEY_BWT, config);
     bwt_type bwt_buf(bwt_file, std::ios::out, buffer_size, bwt_width);
+    size_type sa_width = sa_buf.width();
 
-    //  (3) Construct BWT sequentially by streaming SA and random access to text
+    // (3) Adapt buffersize
+    bwt_buf.buffersize(buffer_size*(size_type)bwt_width);
+    sa_buf.buffersize(buffer_size*(size_type)sa_width);
+
+    //  (4) Construct BWT sequentially by streaming SA and random access to text
     size_type to_add[2] = {(size_type)-1,n-1};
     //for (size_type i=0; i < n; ++i) {
     //    bwt_buf[i] = text[ sa_buf[i]+to_add[sa_buf[i]==0] ];
