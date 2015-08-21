@@ -2,6 +2,7 @@
 #define INCLUDED_SDSL_WT_HELPER
 
 #include "int_vector.hpp"
+#include "sequence.hpp"
 #include <algorithm>
 #include <limits>
 #include <deque>
@@ -39,11 +40,27 @@ void calculate_character_occurences(t_file_buffer& text, const int_vector_size_t
         throw std::logic_error("calculate_character_occurrences: stream size is smaller than size!");
         return;
     }
-    for (int_vector_size_type i=0; i < size; ++i) {
-        uint64_t c = text[i];
-        if (c >= C.size()) { C.resize(c+1, 0); }
-        ++C[c];
+    uint64_t l = nblocks(size, 1024*128);
+    uint64_t s = 0;
+    uint64_t e = size;
+    t_rac* Ctemp = new t_rac[l];
+    blocked_for(i, s, e, 1024*128, 
+	    for (int_vector_size_type j=s; j < e; ++j) {
+		uint64_t c = text[j];
+		if (c >= Ctemp[i].size()) { Ctemp[i].resize(c+1, 0); }
+		++Ctemp[i][c];
+	    });
+    uint32_t sigma = 0;
+    for (uint64_t i = 0; i < l; i++) {
+	sigma = std::max(sigma, (uint32_t)Ctemp[i].size());	
     }
+    C.resize(sigma+1, 0);
+    for (uint64_t i = 0; i < l; i++) {
+	for (uint64_t j = 0; j < Ctemp[i].size(); j++) {
+		C[j] += Ctemp[i][j];
+	}
+    }
+    delete[] Ctemp;
 }
 
 
