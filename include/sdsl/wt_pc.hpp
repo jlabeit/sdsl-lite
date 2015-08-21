@@ -245,7 +245,59 @@ class wt_pc
             // 6. Finish inner nodes by precalculating the bv_pos_rank values
             m_tree.init_node_ranks(m_bv_rank);
         }
+	// In Memory constructor for better performance 
+	wt_pc(int_vector<tree_strat_type::int_width>& input_buf,
+              size_type size):m_size(size) {
+            if (0 == m_size)
+                return;
+            // O(n + |\Sigma|\log|\Sigma|) algorithm for calculating node sizes
+            // TODO: C should also depend on the tree_strategy. C is just a mapping
+            // from a symbol to its frequency. So a map<uint64_t,uint64_t> could be
+            // used for integer alphabets...
+            std::vector<size_type> C;
+            // 1. Count occurrences of characters
+            calculate_character_occurences(input_buf, m_size, C);
+            // 2. Calculate effective alphabet size
+            calculate_effective_alphabet_size(C, m_sigma);
+            // 3. Generate tree shape
+            size_type tree_size = construct_tree_shape(C);
+            // 4. Generate wavelet tree bit sequence m_bv
+            bit_vector temp_bv(tree_size, 0);
 
+            // Initializing starting position of wavelet tree nodes
+            std::vector<uint64_t> bv_node_pos(m_tree.size(), 0);
+            for (size_type v=0; v < m_tree.size(); ++v) {
+                bv_node_pos[v] = m_tree.bv_pos(v);
+            }
+            if (input_buf.size() < size) {
+                throw std::logic_error("Stream size is smaller than size!");
+                return;
+            }
+            value_type old_chr = input_buf[0];
+            uint32_t times = 0;
+            for (size_type i=0; i < m_size; ++i) {
+                value_type chr = input_buf[i];
+                if (chr != old_chr) {
+                    insert_char(old_chr, bv_node_pos, times, temp_bv);
+                    times = 1;
+                    old_chr = chr;
+                } else { // chr == old_chr
+                    ++times;
+                    if (times == 64) {
+                        insert_char(old_chr, bv_node_pos, times, temp_bv);
+                        times = 0;
+                    }
+                }
+            }
+            if (times > 0) {
+                insert_char(old_chr, bv_node_pos, times, temp_bv);
+            }
+            m_bv = bit_vector_type(std::move(temp_bv));
+            // 5. Initialize rank and select data structures for m_bv
+            construct_init_rank_select();
+            // 6. Finish inner nodes by precalculating the bv_pos_rank values
+            m_tree.init_node_ranks(m_bv_rank);
+        }
 
         //! Copy constructor
         wt_pc(const wt_pc& wt) { copy(wt); }
