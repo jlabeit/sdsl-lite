@@ -94,7 +94,7 @@ The SDSL library requires:
 * A 64-bit operating system. Either Mac OS X or Linux are currently supported.
 * For increased performance the processor of the system should support fast bit operations available in `SSE4.2`
 
-Using parallel code
+Using Parallel Code
 -------------------
 
 To make use of multiple cores a compiler with full cilkplus support is needed. 
