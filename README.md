@@ -1,4 +1,4 @@
-SDSL - Succinct Data Structure Library
+SDSL - Succinct Data Structure Library (experimental parallel version)
 =========
 
 [![Build Status](https://webapi.biicode.com/v1/badges/fenix/fenix/sdsl-lite/master)](https://www.biicode.com/fenix/sdsl-lite)
@@ -93,6 +93,14 @@ The SDSL library requires:
 * The [cmake][cmake] build system.
 * A 64-bit operating system. Either Mac OS X or Linux are currently supported.
 * For increased performance the processor of the system should support fast bit operations available in `SSE4.2`
+
+Using parallel code
+-------------------
+
+To make use of the parallel version of the code a compiler with full cilkplus support is needed. 
+So far the code only was tested with gcc 4.8 cilk-branch and gcc 5.1. 
+To enable cilkplus set the environment variable GCILK (export GCILK=true) before running the install script. 
+See the example parallel-saca.cpp on how to use the parallel version of divsufsort (don't foget to set GCILK before compiling). 
 
 Installation
 ------------
