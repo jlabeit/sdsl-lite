@@ -99,8 +99,8 @@ Using parallel code
 
 To make use of multiple cores a compiler with full cilkplus support is needed. 
 So far the code only was tested with gcc 4.8 cilk-branch and gcc 5.1. 
-Before running the install script setup the compiler and define the environment variable GCILK (export GCILK=true). 
-To run compile code with the parallel version of SDSL pass -DCILKP as a compiler flag in addition to the cilkplus compiler flags. 
+Before running the install script, setup the compiler and define the environment variable GCILK (export GCILK=true). 
+To compile code with the parallel version of SDSL pass -DCILKP as a compiler flag in addition to the cilkplus compiler flags. 
 See the example parallel-saca.cpp on how to use the parallel version of divsufsort (don't foget to set GCILK before compiling). 
 
 Installation
@@ -158,6 +158,7 @@ To compile the program using `g++` run:
 ```sh
 g++ -std=c++11 -O3 -DNDEBUG -I ~/include -L ~/lib program.cpp -o program -lsdsl -ldivsufsort -ldivsufsort64
 ```
+
 
 Next we suggest you look at the comprehensive [tutorial][TUT] which describes
 all major features of the library or look at some of the provided [examples](examples).
