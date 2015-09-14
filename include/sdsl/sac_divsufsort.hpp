@@ -546,7 +546,7 @@ construct_SA(const sauchar_t *T, saidx_t *SA,
 				  saidx_t* e = b * block_size + end;
 				  countBBSeq(s, e, block_bucket_cnt + BUCKET_A_SIZE*b, T);
 			  }
-			  // Make explusive prefix sum to calculate offsets of the bucket
+			  // Make exclusive prefix sum to calculate offsets of the bucket
 			  parallel_for (saidx_t i = 0; i < BUCKET_A_SIZE; i++) {
 				  saidx_t sum = BUCKET_B(i, c1);
 				  for (saidx_t b = num_blocks-1; 0 <= b; b--) {
