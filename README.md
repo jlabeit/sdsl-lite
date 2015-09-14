@@ -94,7 +94,7 @@ The SDSL library requires:
 * A 64-bit operating system. Either Mac OS X or Linux are currently supported.
 * For increased performance the processor of the system should support fast bit operations available in `SSE4.2`
 
-Using parallel code
+Using Parallel Code
 -------------------
 
 To make use of multiple cores a compiler with full cilkplus support is needed. 
@@ -102,6 +102,7 @@ So far the code only was tested with gcc 4.8 cilk-branch and gcc 5.1.
 Before running the install script, setup the compiler and define the environment variable GCILK (export GCILK=true). 
 To compile code with the parallel version of SDSL pass -DCILKP as a compiler flag in addition to the cilkplus compiler flags. 
 See the example `parallel-saca.cpp` on how to use the parallel version of divsufsort (don't foget to set GCILK before compiling). 
+If you have any questions or problems regarding the parallel version contact me at julianlabeit@gmail.com.
 
 Installation
 ------------
